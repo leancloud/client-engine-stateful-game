@@ -2,23 +2,25 @@ import { Event as PlayEvent, Play, ReceiverGroup } from "@leancloud/play";
 import { EventEmitter } from "eventemitter3";
 import { Action as ReduxAction, AnyAction, createStore, Reducer, Store} from "redux";
 import { devToolsEnhancer } from "redux-devtools-extension/developmentOnly";
-import { Env, EventHandlers, EventPayloads, IEventContext, ReduxEventHandlers } from "./core";
+import { Env, EventHandlers, EventPayloads, IEventContext, ProtocalEvent, ReduxEventHandlers } from "./core";
 
-const ClientEvent = {
+/**
+ * Client Game 会派发的事件名称
+ */
+export const ClientEvent = {
+  /** state 更新了，游戏可以根据新的 state 更新 UI */
   STATE_UPDATE: "state-update",
 };
 
-export {
-  ClientEvent as Event,
-};
-
-abstract class StatefulGameBase<
+abstract class GameBaseClient<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
 > extends EventEmitter {
+  /** 游戏状态 */
   public abstract get state(): State;
 
+  /** 游戏玩家列表（不包括 masterClient 的 playerList） */
   public get players() {
     if (!this.client.room) {
       return [];
@@ -28,11 +30,13 @@ abstract class StatefulGameBase<
     );
   }
 
+  /** 客户端的事件处理方法 */
   protected abstract events: {
     [name in Event]?: (operators: any, context: IEventContext, payload: EP[name]) => any;
   };
 
   constructor(
+    /** 当前玩家的 Client */
     protected client: Play,
   ) {
     super();
@@ -42,13 +46,18 @@ abstract class StatefulGameBase<
         if (senderId !== this.client.room.masterId) {
           return;
         }
-        if (eventId === "_update") {
+        if (eventId === ProtocalEvent.UPDATE) {
           this.onUpdate(eventData as State);
         }
       },
     );
   }
 
+  /**
+   * 派发游戏事件，在客户端派发的事件会同时在客户端与服务端被处理
+   * @param name 事件名
+   * @param payload 事件的有效载荷
+   */
   public emitEvent = <N extends Event>(name: N, payload?: EP[N]) => {
     this.sendEventToServer(name, payload);
     const handler = this.events[name];
@@ -63,17 +72,21 @@ abstract class StatefulGameBase<
     }
   }
 
+  /** @ignore */
   protected abstract getStateOperators(): any;
 
+  /** @ignore */
   protected abstract onUpdate(nextState: State): any;
 
+  /** @ignore */
   protected emitStateUpdateEvent = () => {
     this.emit(ClientEvent.STATE_UPDATE, this.state);
   }
 
+  /** @ignore */
   private sendEventToServer<N extends Event>(name: N, payload: any) {
     this.client.sendEvent(
-      "_event",
+      ProtocalEvent.EVENT,
       { name, payload },
       {
         receiverGroup: ReceiverGroup.MasterClient,
@@ -83,13 +96,22 @@ abstract class StatefulGameBase<
 
 }
 
-export class StatefulGame<
+/**
+ * 状态化的游戏客户端
+ */
+class GameClient<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
-> extends StatefulGameBase<State, Event, EP> {
+> extends GameBaseClient<State, Event, EP> {
+  /** 游戏状态 */
   public state: State;
 
+  /**
+   * @param client 当前玩家的 Client
+   * @param initialState 游戏初始状态
+   * @param events 客户端的事件处理方法
+   */
   constructor(
     client: Play,
     initialState: State,
@@ -99,6 +121,7 @@ export class StatefulGame<
     this.state = initialState;
   }
 
+  /** @ignore */
   protected getStateOperators() {
     return {
       emitEvent: this.emitEvent,
@@ -107,7 +130,9 @@ export class StatefulGame<
     };
   }
 
+  /** @ignore */
   private getState = () => this.state;
+  /** @ignore */
   private setState = (state: Partial<State>) => {
     this.state = {
       ...this.state,
@@ -116,23 +141,33 @@ export class StatefulGame<
     this.emitStateUpdateEvent();
   }
 
+  /** @ignore */
   // tslint:disable-next-line:member-ordering
   protected onUpdate = this.setState;
 }
 
+/** @ignore */
 const ACTION_REPLACE_STATE = "_REPLACE_STATE";
 
-export class ReduxGame<
+/** 使用 Redux 维护状态的游戏客户端 */
+class ReduxGameClient<
   State extends { [key: string]: any },
   Action extends ReduxAction,
   Event extends string | number,
   EP extends EventPayloads<Event>
-> extends StatefulGameBase<State, Event, EP> {
+> extends GameBaseClient<State, Event, EP> {
+  /** 维护游戏状态的 Redux Store */
+  public store: Store<State, Action>;
+  /** 游戏状态 */
   public get state() {
     return this.store.getState();
   }
 
-  private store: Store<State, Action>;
+  /**
+   * @param client 当前玩家的 Client
+   * @param reducer 描述 state 如何根据 action 变化的 reducer，参见 https://redux.js.org/basics/reducers
+   * @param events 客户端的事件处理方法
+   */
   constructor(
     client: Play,
     reducer: Reducer<State, Action>,
@@ -149,6 +184,7 @@ export class ReduxGame<
     this.store.subscribe(this.emitStateUpdateEvent);
   }
 
+  /** @ignore */
   protected getStateOperators() {
     return {
       dispatch: this.store.dispatch,
@@ -157,41 +193,54 @@ export class ReduxGame<
     };
   }
 
+  /** @ignore */
   protected onUpdate = (nextState: State) => this.store.dispatch(this.replaceState(nextState) as any);
 
+  /** @ignore */
   private replaceState = (nextState: State) => ({
     payload: nextState,
     type: ACTION_REPLACE_STATE,
   })
 
+  /** @ignore */
   private getState = () => this.state;
 }
 
-export const createGame = <
+/**
+ * 创建一个状态化的游戏客户端
+ */
+export const createGameClient = <
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
 >({
+  /** 当前玩家的 Client */
   client,
+  /** 游戏初始状态 */
   initialState,
+  /** 客户端的事件处理方法 */
   events = {},
 }: {
   client: Play;
   initialState: State;
   events?: EventHandlers<State, Event, EP>;
-}) => new StatefulGame(client, initialState, events);
+}) => new GameClient(client, initialState, events);
 
-export const createReduxGame = <
+/** 创建一个使用 Redux 维护状态的游戏客户端 */
+export const createReduxGameClient = <
   State extends { [key: string]: any },
   Action extends ReduxAction,
   Event extends string | number,
   EP extends EventPayloads<Event>
 >({
+  /** 当前玩家的 Client */
   client,
+  /** 描述 state 如何根据 action 变化的 reducer，参见 https://redux.js.org/basics/reducers */
   reducer,
+  /** 客户端的事件处理方法 */
   events = {},
 }: {
   client: Play;
   reducer: Reducer<State, Action>;
   events?: ReduxEventHandlers<State, Event, EP>;
-}) => new ReduxGame(client, reducer, events);
+}) => new ReduxGameClient(client, reducer, events);

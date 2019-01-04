@@ -3,20 +3,24 @@ import { Play, Player, Room } from "@leancloud/play";
 import d = require("debug");
 import { debounce } from "lodash-decorators";
 import { Action as ReduxAction, createStore, Dispatch, Reducer, Store} from "redux";
-import { Env, EventHandlers, EventPayloads, IEventContext, ReduxEventHandlers } from "./core";
+import { Env, EventHandlers, EventPayloads, IEventContext, ProtocalEvent, ReduxEventHandlers } from "./core";
 
+/** @ignore */
 const debug = d("StatefulGame:Server");
 
-export abstract class StatefulGame<
+abstract class StatefulGameBase<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
 > extends Game {
+  /** 游戏状态 */
   protected abstract get state(): State;
 
+  /** 事件处理方法 */
   protected abstract events: {
     [name in Event]?: (operators: any, context: IEventContext, payload: EP[name]) => any;
   };
+  /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
   protected abstract filter: (
     state: State,
     player: Player,
@@ -24,20 +28,22 @@ export abstract class StatefulGame<
 
   constructor(room: Room, masterClient: Play) {
     super(room, masterClient);
-    this.getStream("_event").subscribe(
+    this.getStream(ProtocalEvent.EVENT).subscribe(
       ({ eventData: { name, payload }, senderId}) =>
         this.internalEmitEvent(name, payload, Env.CLIENT, room.getPlayer(senderId)),
     );
   }
 
+  /** @ignore */
   protected abstract getStateOperators(): any;
 
+  /** 向客户端广播当前的状态 */
   @debounce(0)
   protected broadcastState() {
     debug("broadcast state: %o", this.state);
     this.players.map((player) =>
       this.masterClient.sendEvent(
-        "_update",
+        ProtocalEvent.UPDATE,
         this.filter(this.state, player),
         {
           targetActorIds: [player.actorId],
@@ -46,15 +52,21 @@ export abstract class StatefulGame<
     );
   }
 
-  private bindEmitEvent = (defaultEmitter?: Player) => <N extends Event>(
+  /**
+   * 派发游戏事件，在服务端派发的事件只会在服务端被处理
+   * @param name 事件名
+   * @param payload 事件的有效载荷
+   */
+  protected emitEvent = <N extends Event>(
     name: N,
     payload?: EP[N],
-    { emitter = defaultEmitter } = {},
-  ) => this.internalEmitEvent(name, payload, Env.SERVER, emitter)
+    options: {
+      /** 以某位玩家的身份派发 */
+      emitter?: Player,
+    } = {},
+  ) => this.internalEmitEvent(name, payload, Env.SERVER, options.emitter)
 
-  // tslint:disable-next-line:member-ordering
-  protected emitEvent = this.bindEmitEvent();
-
+  /** @ignore */
   private internalEmitEvent<N extends Event>(
     name: N,
     payload?: EP[N],
@@ -76,11 +88,14 @@ export abstract class StatefulGame<
   }
 }
 
-class ProxyGame<
+/**
+ * 状态化的游戏
+ */
+class StatefulGame<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
-> extends StatefulGame<State, Event, EP> {
+> extends StatefulGameBase<State, Event, EP> {
   constructor(
     room: Room,
     masterClient: Play,
@@ -100,6 +115,7 @@ class ProxyGame<
     this.broadcastState();
   }
 
+  /** @ignore */
   protected getStateOperators() {
     return {
       emitEvent: this.emitEvent,
@@ -114,36 +130,37 @@ export const defineGame = <
   Event extends string | number,
   EP extends EventPayloads<Event>
 >({
+  /** 游戏初始状态 */
   initialState,
+  /** 事件处理方法 */
   events = {},
-  filter = (state: State) => {
-    return state;
-  },
+  /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
+  filter = (state: State, player: Player) => state,
 }: {
   initialState: State;
   events?: EventHandlers<State, Event, EP>;
   filter?: (state: State, player: Player) => State;
 // tslint:disable-next-line:callable-types
-}): { new(room: Room, masterClient: Play): ProxyGame<State, Event, EP> } => {
+}): { new(room: Room, masterClient: Play): StatefulGame<State, Event, EP> } => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
-  return class extends ProxyGame<State, Event, EP> {
+  return class extends StatefulGame<State, Event, EP> {
     constructor(room: Room, masterClient: Play) {
       super(room, masterClient, initialState, events, filter);
     }
   };
 };
 
-abstract class ProxyReduxGame<
+abstract class ReduxGame<
   State extends { [key: string]: any },
   Action extends ReduxAction,
   Event extends string | number,
   EP extends EventPayloads<Event>
-> extends StatefulGame<State, Event, EP> {
+> extends StatefulGameBase<State, Event, EP> {
+  protected readonly store: Store<State, Action>;
   protected get state() {
     return this.store.getState();
   }
   protected dispatch: Dispatch<Action>;
-  private store: Store<State, Action>;
 
   constructor(
     room: Room,
@@ -159,6 +176,7 @@ abstract class ProxyReduxGame<
   }
 
   protected getState = () => this.state;
+  /** @ignore */
   protected getStateOperators() {
     return {
       dispatch: this.store.dispatch,
@@ -174,19 +192,20 @@ export const defineReduxGame = <
   Event extends string | number,
   EP extends EventPayloads<Event>
 >({
+  /** 游戏状态转移规则 */
   reducer,
+  /** 事件处理方法 */
   events = {},
-  filter = (state: State) => {
-    return state;
-  },
+  /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
+  filter = (state: State, player: Player) => state,
 }: {
   reducer: Reducer<State, Action>,
   events?: ReduxEventHandlers<State, Event, EP>;
   filter?: (state: State, player: Player) => State;
 // tslint:disable-next-line:callable-types
-}): { new(room: Room, masterClient: Play): ProxyReduxGame<State, Action, Event, EP> } => {
+}): { new(room: Room, masterClient: Play): ReduxGame<State, Action, Event, EP> } => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
-  return class ReduxGame extends ProxyReduxGame<State, Action, Event, EP> {
+  return class extends ReduxGame<State, Action, Event, EP> {
     constructor(room: Room, masterClient: Play) {
       super(room, masterClient, reducer, events, filter);
     }
