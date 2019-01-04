@@ -1,0 +1,11 @@
+extends: 
+  - "tslint:recommended"
+rules:
+  no-console:
+    - true
+    - "log"
+  trailing-comma:
+    - true
+    - esSpecCompliant: true
+  max-classes-per-file: false
+  

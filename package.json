@@ -1,0 +1,50 @@
+{
+  "name": "@leancloud/stateful-game",
+  "version": "0.1.0",
+  "description": "Helpers to implement state-syncing game",
+  "main": "build/core.js",
+  "scripts": {
+    "lint": "tslint src/*",
+    "lint:fix": "tslint src/* --fix",
+    "build": "tsc --build tsconfig.json",
+    "docs": "typedoc src/*.ts --out docs --theme minimal"
+  },
+  "keywords": [
+    "leancloud",
+    "client-engine",
+    "stateful-game"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leancloud/client-engine-stateful-game.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/leancloud/client-engine-stateful-game/issues"
+  },
+  "homepage": "https://github.com/leancloud/client-engine-stateful-game#readme",
+  "devDependencies": {
+    "@types/debug": "0.0.31",
+    "@types/lodash": "^4.14.117",
+    "tslint": "^5.12.0",
+    "typedoc": "^0.14.0",
+    "typescript": "^3.2.2"
+  },
+  "dependencies": {
+    "debug": "^4.1.0",
+    "eventemitter3": "^3.1.0",
+    "lodash": "^4.17.11",
+    "lodash-decorators": "^6.0.0",
+    "redux": "^4.0.1",
+    "redux-devtools-extension": "^2.13.7",
+    "rxjs": "^6.3.3",
+    "typesafe-actions": "^3.0.0"
+  },
+  "peerDependencies": {
+    "@leancloud/play": "^0.14.0",
+    "@leancloud/client-engine": "^0.7.0"
+  }
+}

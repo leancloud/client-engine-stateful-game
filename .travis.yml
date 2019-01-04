@@ -1,0 +1,24 @@
+language: node_js
+node_js:
+- '10'
+before_script:
+  - npx npm-install-peers
+script: 
+  - npm run lint
+  - npm run build
+  - npm run docs
+deploy:
+  - provider: pages
+    github-token:
+      secure: "RdonlxxCctQSh1/XYK8lVx31kWAt/Cedzhs8fxvrUqF2ZQ2vbTY5JO4aKLn/DUg67KHiFD9jqn1SM8uyVjyVM64P2q8IeLdnXYrTVERYEg0UEmv7ntnch09N0rNrj42mHwIpCPUGoDWU2o6TdykduQ0E0j/KqSfPKyvudLw6vo1NWxFdijraEmZS+wDcs9uoAIKQL+W9Tu/GzoWQf/3Fk64IBZ5zkkE63jxA7eKkoGoRU9ObNKNvujVv9+Mg0nzz2E+pyJTmSh4vDErxpsktrTJouvdFUeKgczV+0Nkz7q/8SIkD2lLsW+8gjegqBfsmNUZJgrDMs8Hq0JqOb1cEk7Ku/Z970ai90HMvSt8j2sOmVDe+Fh+0qXTXWria47WpqS9TwaC8EKSHOqu1J2rEnJbeuM4qMOlgChf7PWpy0qldhk6dmAWerz9EVwx483+VkKWp16fLZghOBa9KHBJG8uRD3olJsDoaxCLcyKEtTibp9lac9WelQmoJVsH+Z+tmzDtHbYjXuOxxSq82rbNBE6sVbea/kZuV3DcSw2S0RP7ACrOkPMZrLIm3jE12klUhBnrrhrM4LVXoPNaiqCio0PI72Ht2i8PfaYBlPru68lS7lbpxRyTHqWzzsKM4fUu/3h3O8VPGWFJza3uELBDTm5qiwLRXUBKRwUGDSA2vXow="
+    local-dir: './docs'
+    skip_cleanup: true
+    on:
+      tags: true
+  - provider: npm
+    email: "lee55962698@gmail.com"
+    api_key: 
+      secure: "eHGo8NYMJfJrTXtAdbAP+jUltPfS8TGTcat8SrjhBTBL82V39Ml29GtSwM7GPGnGjDotjb8BnDMJxkzf+rsJW69hfWmlpjNNoYTASphK5Tc590O5z95E1WTrG/86VARDiGU6QlJ/fN0CB+BawS5/zQJnhsHAjRm0oKv0L5Ynqcu3GFdhGK+IWENltEL+3UziLzzal0oT2Cejh5d68R5/6/6mQNOSx+kmOhDDoPeLCLWTkaSyYyOsHcViaMmpXsAOHIqnYrNhln7GLxJ8uz+oYCc2gF5tVMOh5iH7ANpkKdxGJqwu6Rb7bMdncuZJ7RXMVrVzbSy3S/RBmxOSZFmcAlDB/WE+gg+dnacmFTbrkxbXhTnTs13BJw8VO7sdWWTjwA9D/5TIUW7/bOBHswRHVvsueeI1mohBvsAchtMcUYADmfwr1cwY9h9L0XlKlYAI5qPNF6Im3PJmCLX0w01jEAYQswTcJq5ypOZzS1CDPETRDB8kED7sRNlxyhG7JsTj/MeZBQOm6shgpijJsBE3UoxffsSj4DkAdUnUZCcnHQLv5nUIHJdqJab6QV9NcqQ7x8x6hlnuW7ziP4HzNAj8W6nX18H2z7NdhZ4EJo8XeyjM4HgpueglxYKvmIUuSI7UW7hh1nnyrq84g4e7uNKLISL2+ZkMAj36q5gRpwpSbkE="
+    skip_cleanup: true
+    on:
+      tags: true
