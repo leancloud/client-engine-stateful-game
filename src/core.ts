@@ -1,12 +1,12 @@
 import { Player } from "@leancloud/play";
-import { Store } from "redux";
+import { Action as ReduxAction, AnyAction, Store } from "redux";
 
 export enum Env {
   SERVER,
   CLIENT,
 }
 
-interface IEventContext {
+export interface IEventContext {
   players: Player[];
   emitter?: Player;
   env: Env;
@@ -37,9 +37,14 @@ export type EventHandlers<
   [name in Event]?: Handler<IStateOperator<State, Event, Payloads>, IEventContext, Payloads[name]>
 };
 
-interface IReduxStateOperator<State, E extends string | number, EP extends EventPayloads<E>> {
+interface IReduxStateOperator<
+  State,
+  E extends string | number,
+  EP extends EventPayloads<E>,
+  Action extends ReduxAction,
+> {
   getState: () => State;
-  dispatch: Store["dispatch"];
+  dispatch: Store<State, Action>["dispatch"];
   emitEvent: <N extends E>(name: N, payload?: EP[N], options?: {
     emitter?: Player,
   }) => any;
@@ -49,8 +54,9 @@ export type ReduxEventHandlers<
   State,
   Event extends string | number,
   Payloads extends EventPayloads<Event> = {},
+  Action extends ReduxAction = AnyAction,
 > = {
-  [name in Event]?: Handler<IReduxStateOperator<State, Event, Payloads>, IEventContext, Payloads[name]>
+  [name in Event]?: Handler<IReduxStateOperator<State, Event, Payloads, Action>, IEventContext, Payloads[name]>
 };
 
 export function serverOnly<StateOperator, C extends { env: Env }, P>(

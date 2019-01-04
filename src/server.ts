@@ -3,7 +3,7 @@ import { Play, Player, Room } from "@leancloud/play";
 import d = require("debug");
 import { debounce } from "lodash-decorators";
 import { Action as ReduxAction, createStore, Dispatch, Reducer, Store} from "redux";
-import { Env, EventHandlers, EventPayloads, ReduxEventHandlers } from "./core";
+import { Env, EventHandlers, EventPayloads, IEventContext, ReduxEventHandlers } from "./core";
 
 const debug = d("StatefulGame:Server");
 
@@ -15,7 +15,7 @@ export abstract class StatefulGame<
   protected abstract get state(): State;
 
   protected abstract events: {
-    [name in Event]?: (...args: any) => any;
+    [name in Event]?: (operators: any, context: IEventContext, payload: EP[name]) => any;
   };
   protected abstract filter: (
     state: State,
@@ -65,7 +65,6 @@ export abstract class StatefulGame<
     const handler = this.events[name];
     if (handler) {
       const context = {
-        emitEvent: this.bindEmitEvent(emitter),
         emitter,
         emitterEnv,
         env: Env.SERVER,

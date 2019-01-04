@@ -2,7 +2,7 @@ import { Event as PlayEvent, Play, ReceiverGroup } from "@leancloud/play";
 import { EventEmitter } from "eventemitter3";
 import { Action as ReduxAction, AnyAction, createStore, Reducer, Store} from "redux";
 import { devToolsEnhancer } from "redux-devtools-extension/developmentOnly";
-import { Env, EventHandlers, EventPayloads, ReduxEventHandlers } from "./core";
+import { Env, EventHandlers, EventPayloads, IEventContext, ReduxEventHandlers } from "./core";
 
 const ClientEvent = {
   STATE_UPDATE: "state-update",
@@ -29,7 +29,7 @@ abstract class StatefulGameBase<
   }
 
   protected abstract events: {
-    [name in Event]?: (...args: any) => any;
+    [name in Event]?: (operators: any, context: IEventContext, payload: EP[name]) => any;
   };
 
   constructor(
@@ -54,8 +54,8 @@ abstract class StatefulGameBase<
     const handler = this.events[name];
     if (handler) {
       const context = {
+        emitter: this.client.player,
         emitterEnv: Env.CLIENT,
-        emitterId: this.client.player.actorId,
         env: Env.CLIENT,
         players: this.players,
       };
@@ -68,7 +68,7 @@ abstract class StatefulGameBase<
   protected abstract onUpdate(nextState: State): any;
 
   protected emitStateUpdateEvent = () => {
-    this.emit("state-update", this.state);
+    this.emit(ClientEvent.STATE_UPDATE, this.state);
   }
 
   private sendEventToServer<N extends Event>(name: N, payload: any) {
