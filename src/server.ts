@@ -67,6 +67,9 @@ abstract class StatefulGameBase<
   ) => this.internalEmitEvent(name, payload, Env.SERVER, options.emitter)
 
   /** @ignore */
+  protected onAfterEventHandled() { return; }
+
+  /** @ignore */
   private internalEmitEvent<N extends Event>(
     name: N,
     payload?: EP[N],
@@ -82,8 +85,8 @@ abstract class StatefulGameBase<
         env: Env.SERVER,
         players: this.players,
       };
-      handler(this.getStateOperators(), context, payload),
-      this.broadcastState();
+      handler(this.getStateOperators(), context, payload);
+      this.onAfterEventHandled();
     }
   }
 }
@@ -122,6 +125,11 @@ class StatefulGame<
       getState: this.getState,
       setState: this.setState,
     };
+  }
+
+  /** @ignore */
+  protected onAfterEventHandled() {
+    this.broadcastState();
   }
 }
 
