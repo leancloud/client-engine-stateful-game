@@ -12,7 +12,7 @@ export const ClientEvent = {
   STATE_UPDATE: "state-update",
 };
 
-abstract class GameBaseClient<
+abstract class StatefulGameClient<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
@@ -96,6 +96,40 @@ abstract class GameBaseClient<
 
 }
 
+/** @ignore */
+const ACTION_REPLACE_STATE = "_REPLACE_STATE";
+
+// tslint:disable-next-line:interface-name
+declare interface ReplaceAction<State> extends ReduxAction<typeof ACTION_REPLACE_STATE> {
+  payload: State;
+}
+
+abstract class TraceableGameClient<
+  State extends { [key: string]: any },
+  Event extends string | number,
+  EP extends EventPayloads<Event>,
+  > extends StatefulGameClient<State, Event, EP> {
+  /** 维护游戏状态的 Store */
+  protected store: Store<State, ReplaceAction<State>>;
+
+  /** 游戏状态 */
+  public get state() {
+    return this.store.getState();
+  }
+
+  constructor(client: Play, initialState: State) {
+    super(client);
+    const reducer = (state = initialState, action: ReplaceAction<State>) => {
+      if (action.type === ACTION_REPLACE_STATE) {
+        return action.payload;
+      }
+      return state;
+    };
+    this.store = createStore(reducer, devToolsEnhancer({}));
+    this.store.subscribe(this.emitStateUpdateEvent);
+  }
+}
+
 /**
  * 状态化的游戏客户端
  */
@@ -103,10 +137,13 @@ class GameClient<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
-> extends GameBaseClient<State, Event, EP> {
-  /** 游戏状态 */
-  public state: State;
-
+> extends TraceableGameClient<State, Event, EP> {
+  public set state(nextState: State) {
+    this.store.dispatch({
+      payload: nextState,
+      type: ACTION_REPLACE_STATE,
+    });
+  }
   /**
    * @param client 当前玩家的 Client
    * @param initialState 游戏初始状态
@@ -117,8 +154,7 @@ class GameClient<
     initialState: State,
     protected events: EventHandlers<State, Event, EP>,
   ) {
-    super(client);
-    this.state = initialState;
+    super(client, initialState);
   }
 
   /** @ignore */
@@ -133,30 +169,20 @@ class GameClient<
   /** @ignore */
   private getState = () => this.state;
   /** @ignore */
-  private setState = (state: Partial<State>) => {
-    this.state = {
-      ...this.state,
-      ...state,
-    };
-    this.emitStateUpdateEvent();
-  }
+  private setState = (nextState: State) => this.state = nextState;
 
-  /** @ignore */
   // tslint:disable-next-line:member-ordering
   protected onUpdate = this.setState;
 }
 
-/** @ignore */
-const ACTION_REPLACE_STATE = "_REPLACE_STATE";
-
 /** 使用 Redux 维护状态的游戏客户端 */
 class ReduxGameClient<
   State extends { [key: string]: any },
-  Action extends ReduxAction,
+  Action extends AnyAction,
   Event extends string | number,
   EP extends EventPayloads<Event>
-> extends GameBaseClient<State, Event, EP> {
-  /** 维护游戏状态的 Redux Store */
+> extends StatefulGameClient<State, Event, EP> {
+  /** 维护游戏状态的 Store */
   public store: Store<State, Action>;
   /** 游戏状态 */
   public get state() {
@@ -174,11 +200,11 @@ class ReduxGameClient<
     protected events: ReduxEventHandlers<State, Event, EP>,
   ) {
     super(client);
-    const rootReducer = (state: any , action: AnyAction) => {
+    const rootReducer = (state: any, action: Action) => {
       if (action.type === ACTION_REPLACE_STATE) {
-        return reducer(action.payload, action as Action);
+        return reducer(action.payload, action);
       }
-      return reducer(state as State, action as Action);
+      return reducer(state as State, action);
     };
     this.store = createStore(rootReducer, devToolsEnhancer({}));
     this.store.subscribe(this.emitStateUpdateEvent);
@@ -194,13 +220,10 @@ class ReduxGameClient<
   }
 
   /** @ignore */
-  protected onUpdate = (nextState: State) => this.store.dispatch(this.replaceState(nextState) as any);
-
-  /** @ignore */
-  private replaceState = (nextState: State) => ({
+  protected onUpdate = (nextState: State) => this.store.dispatch({
     payload: nextState,
     type: ACTION_REPLACE_STATE,
-  })
+  } as any)
 
   /** @ignore */
   private getState = () => this.state;
