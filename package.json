@@ -41,7 +41,8 @@
     "redux": "^4.0.1",
     "redux-devtools-extension": "^2.13.7",
     "rxjs": "^6.3.3",
-    "typesafe-actions": "^3.0.0"
+    "typesafe-actions": "^3.0.0",
+    "xstate": "^4.3.1"
   },
   "peerDependencies": {
     "@leancloud/play": "^0.14.0",

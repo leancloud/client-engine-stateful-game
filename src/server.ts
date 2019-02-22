@@ -1,14 +1,30 @@
 import { Game } from "@leancloud/client-engine";
 import { Play, Player, Room } from "@leancloud/play";
 import d = require("debug");
+import { pick } from "lodash";
 import { debounce } from "lodash-decorators";
-import { Action as ReduxAction, createStore, Dispatch, Reducer, Store} from "redux";
-import { Env, EventHandlers, EventPayloads, IEventContext, ProtocalEvent, ReduxEventHandlers } from "./core";
+import {
+  Action as ReduxAction,
+  createStore,
+  Dispatch,
+  Reducer,
+  Store
+} from "redux";
+import { interpret, StateMachine, StateSchema } from "xstate";
+import {
+  Env,
+  EventHandlers,
+  EventPayloads,
+  GameEvent,
+  GameEventType,
+  ProtocalEvent,
+  ReduxEventHandlers
+} from "./core";
 
 /** @ignore */
 const debug = d("StatefulGame:Server");
 
-abstract class StatefulGameBase<
+export abstract class StatefulGameBase<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
@@ -16,26 +32,25 @@ abstract class StatefulGameBase<
   /** 游戏状态 */
   protected abstract get state(): State;
 
-  /** 事件处理方法 */
-  protected abstract events: {
-    [name in Event]?: (operators: any, context: IEventContext, payload: EP[name]) => any;
-  };
   /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
-  protected abstract filter: (
-    state: State,
-    player: Player,
-  ) => State;
+  protected abstract filter: (state: State, player: Player) => State;
 
   constructor(room: Room, masterClient: Play) {
     super(room, masterClient);
     this.getStream(ProtocalEvent.EVENT).subscribe(
-      ({ eventData: { name, payload }, senderId}) =>
-        this.internalEmitEvent(name, payload, Env.CLIENT, room.getPlayer(senderId)),
+      ({ eventData: { name, payload }, senderId }) =>
+        this.internalEmitEvent(
+          name,
+          payload,
+          Env.CLIENT,
+          room.getPlayer(senderId)
+        )
     );
   }
 
-  /** @ignore */
-  protected abstract getStateOperators(): any;
+  protected abstract handleEvent<N extends Event>(
+    event: GameEvent<N, EP[N]>
+  ): any;
 
   /** 向客户端广播当前的状态 */
   @debounce(0)
@@ -46,9 +61,9 @@ abstract class StatefulGameBase<
         ProtocalEvent.UPDATE,
         this.filter(this.state, player),
         {
-          targetActorIds: [player.actorId],
-        },
-      ),
+          targetActorIds: [player.actorId]
+        }
+      )
     );
   }
 
@@ -62,32 +77,35 @@ abstract class StatefulGameBase<
     payload?: EP[N],
     options: {
       /** 以某位玩家的身份派发 */
-      emitter?: Player,
-    } = {},
+      emitter?: Player;
+    } = {}
   ) => this.internalEmitEvent(name, payload, Env.SERVER, options.emitter)
-
-  /** @ignore */
-  protected onAfterEventHandled() { return; }
 
   /** @ignore */
   private internalEmitEvent<N extends Event>(
     name: N,
     payload?: EP[N],
     emitterEnv = Env.CLIENT,
-    emitter?: Player,
+    emitter?: Player
   ) {
-    debug("event: %o", { name, payload, emitterId: emitter ? emitter.userId : undefined });
-    const handler = this.events[name];
-    if (handler) {
-      const context = {
-        emitter,
-        emitterEnv,
-        env: Env.SERVER,
-        players: this.players,
-      };
-      handler(this.getStateOperators(), context, payload);
-      this.onAfterEventHandled();
-    }
+    debug("event: %o", {
+      emitterId: emitter ? emitter.userId : undefined,
+      name,
+      payload,
+    });
+    const context = {
+      emitter,
+      emitterEnv,
+      env: Env.SERVER,
+      players: this.players
+    };
+    const event = {
+      ...payload,
+      ...context,
+      payload,
+      type: name
+    } as GameEvent<N, EP[N]>;
+    this.handleEvent(event);
   }
 }
 
@@ -103,8 +121,11 @@ class StatefulGame<
     room: Room,
     masterClient: Play,
     protected state: State,
-    protected events: EventHandlers<State, Event, EP>,
-    protected filter: (state: State, player: Player) => State,
+    protected events: EventHandlers<State, Event, EP> = {},
+    protected filter: (state: State, player: Player) => State = (
+      s: State,
+      player: Player
+    ) => s
   ) {
     super(room, masterClient);
   }
@@ -113,23 +134,23 @@ class StatefulGame<
   protected setState = (state: Partial<State>) => {
     this.state = {
       ...this.state,
-      ...state,
+      ...state
     };
     this.broadcastState();
   }
 
-  /** @ignore */
-  protected getStateOperators() {
-    return {
-      emitEvent: this.emitEvent,
-      getState: this.getState,
-      setState: this.setState,
-    };
-  }
-
-  /** @ignore */
-  protected onAfterEventHandled() {
-    this.broadcastState();
+  protected handleEvent<N extends Event>(event: GameEvent<N, EP[N]>) {
+    const handler = this.events[event.type as N];
+    if (handler) {
+      handler(
+        {
+          emitEvent: this.emitEvent,
+          getState: this.getState,
+          setState: this.setState
+        },
+        event
+      );
+    }
   }
 }
 
@@ -141,15 +162,15 @@ export const defineGame = <
   /** 游戏初始状态 */
   initialState,
   /** 事件处理方法 */
-  events = {},
+  events,
   /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
-  filter = (state: State, player: Player) => state,
+  filter
 }: {
   initialState: State;
   events?: EventHandlers<State, Event, EP>;
   filter?: (state: State, player: Player) => State;
-// tslint:disable-next-line:callable-types
-}): { new(room: Room, masterClient: Play): StatefulGame<State, Event, EP> } => {
+  // tslint:disable-next-line:callable-types
+}): new (room: Room, masterClient: Play) => StatefulGame<State, Event, EP> => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
   return class extends StatefulGame<State, Event, EP> {
     constructor(room: Room, masterClient: Play) {
@@ -158,6 +179,9 @@ export const defineGame = <
   };
 };
 
+/**
+ * 使用 Redux 进行状态管理的游戏
+ */
 abstract class ReduxGame<
   State extends { [key: string]: any },
   Action extends ReduxAction,
@@ -174,8 +198,11 @@ abstract class ReduxGame<
     room: Room,
     masterClient: Play,
     reducer: Reducer<State, Action>,
-    protected events: ReduxEventHandlers<State, Event, EP>,
-    protected filter: (state: State, player: Player) => State,
+    protected events: ReduxEventHandlers<State, Event, EP, Action> = {},
+    protected filter: (state: State, player: Player) => State = (
+      state: State,
+      player: Player
+    ) => state
   ) {
     super(room, masterClient);
     this.store = createStore(reducer);
@@ -183,15 +210,20 @@ abstract class ReduxGame<
     this.dispatch = this.store.dispatch;
   }
 
-  protected getState = () => this.state;
-  /** @ignore */
-  protected getStateOperators() {
-    return {
-      dispatch: this.store.dispatch,
-      emitEvent: this.emitEvent,
-      getState: this.getState,
-    };
+  protected handleEvent<N extends Event>(event: GameEvent<N, EP[N]>) {
+    const handler = this.events[event.type as N];
+    if (handler) {
+      handler(
+        {
+          dispatch: this.store.dispatch,
+          emitEvent: this.emitEvent,
+          getState: this.getState
+        },
+        event
+      );
+    }
   }
+  protected getState = () => this.state;
 }
 
 export const defineReduxGame = <
@@ -203,19 +235,91 @@ export const defineReduxGame = <
   /** 游戏状态转移规则 */
   reducer,
   /** 事件处理方法 */
-  events = {},
+  events,
   /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
-  filter = (state: State, player: Player) => state,
+  filter
 }: {
-  reducer: Reducer<State, Action>,
-  events?: ReduxEventHandlers<State, Event, EP>;
+  reducer: Reducer<State, Action>;
+  events?: ReduxEventHandlers<State, Event, EP, Action>;
   filter?: (state: State, player: Player) => State;
-// tslint:disable-next-line:callable-types
-}): { new(room: Room, masterClient: Play): ReduxGame<State, Action, Event, EP> } => {
+  // tslint:disable-next-line:callable-types
+}): new (room: Room, masterClient: Play) => ReduxGame<State, Action, Event, EP> => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
   return class extends ReduxGame<State, Action, Event, EP> {
     constructor(room: Room, masterClient: Play) {
       super(room, masterClient, reducer, events, filter);
+    }
+  };
+};
+
+declare type getStateType<
+  Context,
+  Schema extends StateSchema,
+  Event extends string | number,
+  EP extends EventPayloads<Event>,
+> = Pick<
+  StateMachine<Context, Schema, GameEventType<EP>>["initialState"],
+  "value" | "context"
+>;
+
+/**
+ * 使用 XState 进行状态管理的游戏
+ */
+export class XStateGame<
+  Context,
+  Schema extends StateSchema,
+  Event extends string | number,
+  EP extends EventPayloads<Event>,
+> extends StatefulGameBase<getStateType<Context, Schema, Event, EP>, Event, EP> {
+  public get state() {
+    return pick(this.service.state, ["value", "context"]);
+  }
+
+  protected service = interpret(this.machine);
+
+  constructor(
+    room: Room,
+    masterClient: Play,
+    private machine: StateMachine<Context, Schema, GameEventType<EP>>,
+    protected filter: (
+      state: getStateType<Context, Schema, Event, EP>,
+      player: Player
+    ) => getStateType<Context, Schema, Event, EP> = (
+      state: getStateType<Context, Schema, Event, EP>,
+      player: Player
+    ) => state
+  ) {
+    super(room, masterClient);
+    this.service.onChange(this.broadcastState.bind(this));
+    this.service.start();
+  }
+
+  protected handleEvent<N extends Event>(event: GameEvent<N, EP[N]>) {
+    this.service.send(event);
+  }
+}
+
+export const defineXStateGame = <
+  Context,
+  Schema extends StateSchema,
+  Event extends string | number,
+  EP extends EventPayloads<Event>,
+>({
+  machine,
+  /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
+  filter
+}: {
+  machine: StateMachine<Context, Schema, GameEventType<EP>>;
+  filter?: (
+    state: getStateType<Context, Schema, Event, EP>,
+    player: Player
+  ) => getStateType<Context, Schema, Event, EP>;
+  // tslint:disable-next-line:callable-types
+}): { new (room: Room, masterClient: Play): XStateGame<Context, Schema, Event, EP> } => {
+  // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
+  return class extends XStateGame<Context, Schema, Event, EP> {
+    constructor(room: Room, masterClient: Play) {
+      super(room, masterClient, machine, filter);
     }
   };
 };

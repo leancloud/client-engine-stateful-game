@@ -2,7 +2,7 @@ import { Event as PlayEvent, Play, ReceiverGroup } from "@leancloud/play";
 import { EventEmitter } from "eventemitter3";
 import { Action as ReduxAction, AnyAction, createStore, Reducer, Store} from "redux";
 import { devToolsEnhancer } from "redux-devtools-extension/developmentOnly";
-import { Env, EventHandlers, EventPayloads, IEventContext, ProtocalEvent, ReduxEventHandlers } from "./core";
+import { Env, EventHandlers, EventPayloads, GameEvent, ProtocalEvent, ReduxEventHandlers } from "./core";
 
 /**
  * Client Game 会派发的事件名称
@@ -12,7 +12,7 @@ export const ClientEvent = {
   STATE_UPDATE: "state-update",
 };
 
-abstract class StatefulGameClient<
+export abstract class StatefulGameClient<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
@@ -29,11 +29,6 @@ abstract class StatefulGameClient<
       (player) => player !== this.client.room.master,
     );
   }
-
-  /** 客户端的事件处理方法 */
-  protected abstract events: {
-    [name in Event]?: (operators: any, context: IEventContext, payload: EP[name]) => any;
-  };
 
   constructor(
     /** 当前玩家的 Client */
@@ -60,20 +55,22 @@ abstract class StatefulGameClient<
    */
   public emitEvent = <N extends Event>(name: N, payload?: EP[N]) => {
     this.sendEventToServer(name, payload);
-    const handler = this.events[name];
-    if (handler) {
-      const context = {
-        emitter: this.client.player,
-        emitterEnv: Env.CLIENT,
-        env: Env.CLIENT,
-        players: this.players,
-      };
-      handler(this.getStateOperators(), context, payload);
-    }
+    const context = {
+      emitter: this.client.player,
+      emitterEnv: Env.CLIENT,
+      env: Env.CLIENT,
+      players: this.players,
+    };
+    const event = {
+      ...payload,
+      ...context,
+      payload,
+      type: name,
+    } as GameEvent<N, EP[N]>;
+    this.handleEvent(event);
   }
 
-  /** @ignore */
-  protected abstract getStateOperators(): any;
+  protected abstract handleEvent<N extends Event>(event: GameEvent<N, EP[N]>): any;
 
   /** @ignore */
   protected abstract onUpdate(nextState: State): any;
@@ -104,6 +101,10 @@ declare interface ReplaceAction<State> extends ReduxAction<typeof ACTION_REPLACE
   payload: State;
 }
 
+/**
+ * 使用 Redux Store 作为 State 容器的客户端
+ * 可以使用 [Redux Devtool](http://extension.remotedev.io/) 调试状态
+ */
 abstract class TraceableGameClient<
   State extends { [key: string]: any },
   Event extends string | number,
@@ -131,13 +132,16 @@ abstract class TraceableGameClient<
 }
 
 /**
- * 状态化的游戏客户端
+ * 状态化的游戏客户端。
  */
 class GameClient<
   State extends { [key: string]: any },
   Event extends string | number,
   EP extends EventPayloads<Event>
 > extends TraceableGameClient<State, Event, EP> {
+  public get state() {
+    return super.state;
+  }
   public set state(nextState: State) {
     this.store.dispatch({
       payload: nextState,
@@ -158,21 +162,27 @@ class GameClient<
   }
 
   /** @ignore */
-  protected getStateOperators() {
-    return {
-      emitEvent: this.emitEvent,
-      getState: this.getState,
-      setState: this.setState,
-    };
+  protected handleEvent<N extends Event>(event: GameEvent<N, EP[N]>) {
+    const handler = this.events[event.type as N];
+    if (handler) {
+      handler({
+        emitEvent: this.emitEvent,
+        getState: this.getState,
+        setState: this.setState,
+      }, event);
+    }
   }
 
   /** @ignore */
   private getState = () => this.state;
   /** @ignore */
-  private setState = (nextState: State) => this.state = nextState;
+  private setState = (state: Partial<State>) => this.state = {
+    ...this.state,
+    ...state,
+  }
 
   // tslint:disable-next-line:member-ordering
-  protected onUpdate = this.setState;
+  protected onUpdate = (nextState: State) => this.state = nextState;
 }
 
 /** 使用 Redux 维护状态的游戏客户端 */
@@ -197,7 +207,7 @@ class ReduxGameClient<
   constructor(
     client: Play,
     reducer: Reducer<State, Action>,
-    protected events: ReduxEventHandlers<State, Event, EP>,
+    protected events: ReduxEventHandlers<State, Event, EP, Action>,
   ) {
     super(client);
     const rootReducer = (state: any, action: Action) => {
@@ -211,12 +221,15 @@ class ReduxGameClient<
   }
 
   /** @ignore */
-  protected getStateOperators() {
-    return {
-      dispatch: this.store.dispatch,
-      emitEvent: this.emitEvent,
-      getState: this.getState,
-    };
+  protected handleEvent<N extends Event>(event: GameEvent<N, EP[N]>) {
+    const handler = this.events[event.type as N];
+    if (handler) {
+      handler({
+        dispatch: this.store.dispatch,
+        emitEvent: this.emitEvent,
+        getState: this.getState,
+        }, event);
+    }
   }
 
   /** @ignore */
@@ -265,5 +278,5 @@ export const createReduxGameClient = <
 }: {
   client: Play;
   reducer: Reducer<State, Action>;
-  events?: ReduxEventHandlers<State, Event, EP>;
+  events?: ReduxEventHandlers<State, Event, EP, Action>;
 }) => new ReduxGameClient(client, reducer, events);
