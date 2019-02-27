@@ -30,8 +30,8 @@ export interface IEventContext {
 export type Destructible<T> = T extends { [key: string]: any } ? T : {};
 
 export type GameEvent<
-  name extends string | number | symbol = string,
-  Payload = any
+  name extends string | number | symbol,
+  Payload
 > = Destructible<Payload> &
   IEventContext & {
     type: name;
@@ -79,7 +79,7 @@ interface IStateOperator<
 export type EventHandlers<
   State,
   Event extends string | number,
-  Payloads extends EventPayloads<Event> = {}
+  Payloads extends EventPayloads<Event>
 > = {
   [name in Event]?: Handler<
     IStateOperator<State, Event, Payloads>,
