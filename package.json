@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "Helpers to implement state-syncing game",
   "main": "build/core.js",
+  "typings": "build/core.d.ts",
   "scripts": {
     "lint": "tslint src/*",
     "lint:fix": "tslint src/* --fix",
