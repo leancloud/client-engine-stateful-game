@@ -1,6 +1,6 @@
 {
   "name": "@leancloud/stateful-game",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Helpers to implement state-syncing game",
   "main": "build/core.js",
   "typings": "build/core.d.ts",
@@ -28,7 +28,7 @@
   },
   "homepage": "https://github.com/leancloud/client-engine-stateful-game#readme",
   "devDependencies": {
-    "@types/debug": "0.0.31",
+    "@types/debug": "^4.1.2",
     "@types/lodash": "^4.14.117",
     "tslint": "^5.12.0",
     "typedoc": "^0.14.0",
