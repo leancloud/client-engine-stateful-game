@@ -10,9 +10,9 @@ export enum Env {
 /** 客户端与服务端通过 Play 的 customEvent 通讯时使用的 EventId */
 export enum ProtocalEvent {
   /** 客户端派发事件 */
-  EVENT = "_event",
+  EVENT,
   /** 状态更新 */
-  UPDATE = "_update"
+  UPDATE
 }
 
 /** 事件上下文 */

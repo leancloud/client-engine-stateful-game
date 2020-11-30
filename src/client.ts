@@ -1,4 +1,4 @@
-import { Event as PlayEvent, Play, ReceiverGroup } from "@leancloud/play";
+import { Client, Event as PlayEvent, ReceiverGroup } from "@leancloud/play";
 import { EventEmitter } from "eventemitter3";
 import { Action as ReduxAction, AnyAction, createStore, Reducer, Store} from "redux";
 import { devToolsEnhancer } from "redux-devtools-extension/developmentOnly";
@@ -32,7 +32,7 @@ export abstract class StatefulGameClient<
 
   constructor(
     /** 当前玩家的 Client */
-    protected client: Play,
+    protected client: Client,
   ) {
     super();
     this.client.on(
@@ -118,7 +118,7 @@ abstract class TraceableGameClient<
     return this.store.getState();
   }
 
-  constructor(client: Play, initialState: State) {
+  constructor(client: Client, initialState: State) {
     super(client);
     const reducer = (state = initialState, action: ReplaceAction<State>) => {
       if (action.type === ACTION_REPLACE_STATE) {
@@ -154,7 +154,7 @@ class GameClient<
    * @param events 客户端的事件处理方法
    */
   constructor(
-    client: Play,
+    client: Client,
     initialState: State,
     protected events: EventHandlers<State, Event, EP>,
   ) {
@@ -205,7 +205,7 @@ class ReduxGameClient<
    * @param events 客户端的事件处理方法
    */
   constructor(
-    client: Play,
+    client: Client,
     reducer: Reducer<State, Action>,
     protected events: ReduxEventHandlers<State, Event, EP, Action>,
   ) {
@@ -257,7 +257,7 @@ export const createGameClient = <
   /** 客户端的事件处理方法 */
   events = {},
 }: {
-  client: Play;
+  client: Client;
   initialState: State;
   events?: EventHandlers<State, Event, EP>;
 }) => new GameClient(client, initialState, events);
@@ -276,7 +276,7 @@ export const createReduxGameClient = <
   /** 客户端的事件处理方法 */
   events = {},
 }: {
-  client: Play;
+  client: Client;
   reducer: Reducer<State, Action>;
   events?: ReduxEventHandlers<State, Event, EP, Action>;
 }) => new ReduxGameClient(client, reducer, events);

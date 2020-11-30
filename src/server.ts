@@ -1,5 +1,5 @@
 import { Game } from "@leancloud/client-engine";
-import { Play, Player, Room } from "@leancloud/play";
+import { Client, Player, Room } from "@leancloud/play";
 import d = require("debug");
 import { pick } from "lodash";
 import { debounce } from "lodash-decorators";
@@ -35,7 +35,7 @@ export abstract class StatefulGameBase<
   /** 滤镜（玩家在客户端能看到状态与游戏状态的映射关系） */
   protected abstract filter: (state: State, player: Player) => State;
 
-  constructor(room: Room, masterClient: Play) {
+  constructor(room: Room, masterClient: Client) {
     super(room, masterClient);
     this.getStream(ProtocalEvent.EVENT).subscribe(
       ({ eventData: { name, payload }, senderId }) =>
@@ -119,7 +119,7 @@ class StatefulGame<
 > extends StatefulGameBase<State, Event, EP> {
   constructor(
     room: Room,
-    masterClient: Play,
+    masterClient: Client,
     protected state: State,
     protected events: EventHandlers<State, Event, EP> = {},
     protected filter: (state: State, player: Player) => State = (
@@ -170,10 +170,10 @@ export const defineGame = <
   events?: EventHandlers<State, Event, EP>;
   filter?: (state: State, player: Player) => State;
   // tslint:disable-next-line:callable-types
-}): new (room: Room, masterClient: Play) => StatefulGame<State, Event, EP> => {
+}): new (room: Room, masterClient: Client) => StatefulGame<State, Event, EP> => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
   return class extends StatefulGame<State, Event, EP> {
-    constructor(room: Room, masterClient: Play) {
+    constructor(room: Room, masterClient: Client) {
       super(room, masterClient, initialState, events, filter);
     }
   };
@@ -196,7 +196,7 @@ abstract class ReduxGame<
 
   constructor(
     room: Room,
-    masterClient: Play,
+    masterClient: Client,
     reducer: Reducer<State, Action>,
     protected events: ReduxEventHandlers<State, Event, EP, Action> = {},
     protected filter: (state: State, player: Player) => State = (
@@ -243,10 +243,10 @@ export const defineReduxGame = <
   events?: ReduxEventHandlers<State, Event, EP, Action>;
   filter?: (state: State, player: Player) => State;
   // tslint:disable-next-line:callable-types
-}): new (room: Room, masterClient: Play) => ReduxGame<State, Action, Event, EP> => {
+}): new (room: Room, masterClient: Client) => ReduxGame<State, Action, Event, EP> => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
   return class extends ReduxGame<State, Action, Event, EP> {
-    constructor(room: Room, masterClient: Play) {
+    constructor(room: Room, masterClient: Client) {
       super(room, masterClient, reducer, events, filter);
     }
   };
@@ -279,7 +279,7 @@ export class XStateGame<
 
   constructor(
     room: Room,
-    masterClient: Play,
+    masterClient: Client,
     private machine: StateMachine<Context, Schema, GameEventType<EP>>,
     protected filter: (
       state: getStateType<Context, Schema, Event, EP>,
@@ -315,10 +315,10 @@ export const defineXStateGame = <
     player: Player
   ) => getStateType<Context, Schema, Event, EP>;
   // tslint:disable-next-line:callable-types
-}): { new (room: Room, masterClient: Play): XStateGame<Context, Schema, Event, EP> } => {
+}): { new (room: Room, masterClient: Client): XStateGame<Context, Schema, Event, EP> } => {
   // This is a workaround for https://github.com/Microsoft/TypeScript/issues/17293
   return class extends XStateGame<Context, Schema, Event, EP> {
-    constructor(room: Room, masterClient: Play) {
+    constructor(room: Room, masterClient: Client) {
       super(room, masterClient, machine, filter);
     }
   };
