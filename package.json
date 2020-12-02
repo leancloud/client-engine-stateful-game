@@ -1,6 +1,6 @@
 {
   "name": "@leancloud/stateful-game",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Helpers to implement state-syncing game",
   "main": "build/core.js",
   "typings": "build/core.d.ts",
