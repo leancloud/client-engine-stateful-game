@@ -48,5 +48,18 @@
   "peerDependencies": {
     "@leancloud/play": "^1.0.0",
     "@leancloud/client-engine": "^1.0.2"
-  }
+  },
+  "files": [
+    "build/",
+    "action.js",
+    "action.d.ts",
+    "client.js",
+    "client.d.ts",
+    "server.js",
+    "server.d.ts",
+    "redux.js",
+    "redux.d.ts",
+    "xstate.js",
+    "xstate.d.ts"
+  ]
 }
